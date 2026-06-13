@@ -1,36 +1,46 @@
-from flask import Flask, jsonify
-import random
-import time
+from flask import Flask
+import subprocess
+import threading
 
 app = Flask(__name__)
 
+logs = []
+
+def run_script():
+    process = subprocess.Popen(
+        ["python", "worker.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+
+    for line in process.stdout:
+        line = line.strip()
+        print(line)          # همچنان در ترمینال دیده می‌شود
+        logs.append(line)    # ذخیره برای وب
+
+        if len(logs) > 100:
+            logs.pop(0)
+
+threading.Thread(target=run_script, daemon=True).start()
+
 @app.route("/")
 def home():
-    return """
+    log_html = "<br>".join(logs[::-1])
+
+    return f"""
     <html>
     <head>
-        <script>
-            async function updateData() {
-                const res = await fetch('/data');
-                const data = await res.json();
-                document.getElementById('counter').innerText = data.counter;
-                document.getElementById('value').innerText = data.value;
-            }
-            setInterval(updateData, 1000);
-            window.onload = updateData;
-        </script>
+        <meta http-equiv="refresh" content="1">
+        <title>Live Logs</title>
     </head>
-    <body style="font-family: Arial; padding: 30px;">
-        <h1>Live Data Dashboard</h1>
-        <p><b>Counter:</b> <span id="counter">-</span></p>
-        <p><b>Value:</b> <span id="value">-</span></p>
+    <body style="background:#111;color:#0f0;font-family:monospace;padding:20px">
+        <h2>Live Python Logs</h2>
+        {log_html}
     </body>
     </html>
     """
 
-@app.route("/data")
-def data():
-    return jsonify({
-        "counter": int(time.time()),
-        "value": random.randint(1, 100)
-    })
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
